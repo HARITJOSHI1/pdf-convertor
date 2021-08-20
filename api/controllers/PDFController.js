@@ -1,36 +1,35 @@
-const axios = require("axios").default;
-const path = require("path");
 const fs = require("fs");
+const path = require("path");
+const dotenv = require("dotenv");
+const libre = require("libreoffice-convert");
+const AppError = require("../utils/AppError");
 
-const docxConverter = require("docx-pdf");
-
-const { PDFNet } = require("@pdftron/pdfnet-node");
+dotenv.config({ path: "../config.env" });
 const catchAsync = require("../utils/catchAsync");
 
-exports.getData = catchAsync(async (req, res) => {
-  res.status(200).json({
-    status: "success",
-    data: "Hello World",
-  });
-});
 
-exports.convert = catchAsync(async (req, res) => {
+exports.convert = catchAsync(async (req, res, next) => {
   const { filename } = req.query;
   const outputFile = String(filename).split(".docx")[0];
 
   const inputPath = path.join(__dirname, `../files/${filename}`);
   const outputPath = path.join(__dirname, `../output/${outputFile}.pdf`);
 
-  docxConverter(inputPath, outputPath, (err, obj) => {
-    if(err){
-      res.status(500).json({
-        status: "failed",
-        message: "Something went wrong."
-      })
-    }
-    const file = fs.readFileSync(obj.filename);
-    res.setHeader('Content-Type', 'application/pdf').status(200).end(file);
+  const file = fs.readFileSync(inputPath);
+
+  libre.convert(file, ".pdf", undefined, (err, done) => {
+    if (err) return next(new AppError(500, "Something went worng !"));
+
+    fs.writeFile(outputPath, done, "utf-8", (err) => {
+      if (err) return next(new AppError(500, "Something went worng !"));
+
+      const doc = fs.readFileSync(outputPath);
+
+      res.download(outputPath, (err) => {
+        if (err) return next(new AppError(500, "Something went worng !"));
+        fs.unlinkSync(outputPath); 
+      });
+    });
+
   });
-
 });
-
